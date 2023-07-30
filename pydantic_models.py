@@ -36,3 +36,18 @@ class Wallet(pydantic.BaseModel):
     address: str
     sended_transactions: list[Transaction] = []
     received_transactions: list[Transaction] = []
+
+
+class UserToUpdate(pydantic.BaseModel):
+    id: int
+    tg_ID: int = None
+    nick: str = None
+    create_date: datetime = None
+    wallet: 'Wallet' = None
+
+
+class UserToCreate(pydantic.BaseModel):
+    tg_ID: int = None
+    nick: str = None
+
+
