@@ -2,7 +2,7 @@ import datetime
 import config
 import pydantic_models
 import bit
-from db import *
+from database.db import *
 
 
 # -------------------------- CREATE -------------------------- #
@@ -88,11 +88,6 @@ def get_user_by_id(id: int):
 
 
 @db_session
-def get_user_by_tg_id(tg_id: int):
-    return User.select(lambda u: u.tg_ID == tg_id).first()
-
-
-@db_session
 def get_transaction_info(transaction: pydantic_models.Transaction):
     return {"id": transaction.id,
             "sender": transaction.sender if transaction.sender else None,
@@ -157,7 +152,7 @@ def update_all_wallets():
 
 
 @db_session
-def update_user(user: pydantic_models.User):
+def update_user(user: pydantic_models.UserToUpdate):
     user_to_update = User[user.id]
     if user.tg_ID:
         user_to_update.tg_ID = user.tg_ID
