@@ -1,13 +1,21 @@
-import math
 import telebot
 import config
 import pydantic_models
+import client
+import json
+import math
 
 bot = telebot.TeleBot(config.bot_token)
 
 
 @bot.message_handler(commands=['start'])
 def start_message(message):
+    try:
+        client.create_user({"tg_ID": message.from_user.id, "nick": message.from_user.username})
+    except Exception as Ex:
+        # bot.send_message(message.chat.id, f'Возникла ошибка: {Ex.args}')
+        pass
+
     # объект для работы с кнопками
     markup = telebot.types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
 
@@ -29,24 +37,16 @@ def start_message(message):
 
 @bot.message_handler(regexp='Кошелек')
 def wallet(message):
+    wallet = client.get_user_wallet_by_tg_id(message.from_user.id)
+
     markup = telebot.types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     btn1 = telebot.types.KeyboardButton('Меню')  # кнопка возврата в меню
     markup.add(btn1)
 
     balance = 0  # сюда будем получать баланс через API
-    text = f'Ваш баланс: {balance}'
+    text = f'Ваш баланс: {wallet["balance"] / 100000000} BTC\n' \
+           f'Ваш адрес: {wallet["address"]}'
 
-    bot.send_message(message.chat.id, text, reply_markup=markup)
-
-
-@bot.message_handler(regexp='Перевести')
-def transaction(message):
-    markup = telebot.types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-
-    btn1 = telebot.types.KeyboardButton('Меню')
-    markup.add(btn1)
-
-    text = f'Введите адрес кошелька куда хотите перевести: '
     bot.send_message(message.chat.id, text, reply_markup=markup)
 
 
@@ -57,8 +57,8 @@ def history(message):
     btn1 = telebot.types.KeyboardButton('Меню')
     markup.add(btn1)
 
-    transactions = ['1', '2', '3']  # будут загружены транзакции
-    text = f'Ваши транзакции{transactions}'
+    transactions = client.get_user_transactions(client.get_user_by_tg_id(message.from_user.id)['id'])
+    text = f'Ваши транзакции \n{transactions}'
 
     bot.send_message(message.chat.id, text, reply_markup=markup)
 
@@ -98,10 +98,8 @@ def admin_panel(message):
     bot.send_message(message.chat.id, text, reply_markup=markup)
 
 
-users = config.fake_database['users']
-
 # ------- For pagination ------- #
-all_pages = math.ceil(len(users) / 4)  # количество страниц
+all_pages = math.ceil(len(client.get_users()) / 4)  # количество страниц
 page = 1  # страница
 current = 0  # количество пользователей до страницы
 # ------- For pagination ------- #
@@ -116,6 +114,7 @@ def all_users(message):
     current = 0
     page = 1
     text = f'Юзеры:'
+    users = client.get_users()
     inline_markup = telebot.types.InlineKeyboardMarkup()  # объект с инлайн-разметкой
 
     # Если количество пользователей больше 4
@@ -128,8 +127,8 @@ def all_users(message):
 
     # список из 4-х первых пользователей
     for user in users[0:4]:
-        inline_markup.add(telebot.types.InlineKeyboardButton(text=f'Юзер: {user["name"]}',
-                                                             callback_data=f"user_{user['id']}"))
+        inline_markup.add(telebot.types.InlineKeyboardButton(text=f'Юзер: {user["tg_ID"]}',
+                                                             callback_data=f"user_{user['tg_ID']}"))
     current = 4
     bot.send_message(message.chat.id, text,
                      reply_markup=inline_markup)
@@ -142,6 +141,7 @@ def callback_query(call):
     global current
 
     query_type = call.data.split('_')[0]  # получаем тип запроса
+    users = client.get_users()
 
     # запрос информации по пользователю
     if query_type == 'user':
@@ -151,15 +151,14 @@ def callback_query(call):
 
         for user in users[current - 4:current]:
             # поиск пользователя по id из списка пользователей на странице
-            if str(user['id']) == user_id:
+            if str(user['tg_ID']) == user_id:
                 inline_markup.add(telebot.types.InlineKeyboardButton(text="Назад", callback_data='current'),
                                   telebot.types.InlineKeyboardButton(text="Удалить юзера",
                                                                      callback_data=f'delete_user_{user_id}'))
                 bot.edit_message_text(text=f'Данные по юзеру:\n'
-                                           f'ID: {user["id"]}\n'
-                                           f'Имя: {user["name"]}\n'
-                                           f'Ник: {user["nick"]}\n'
-                                           f'Баланс: {user["balance"]}',
+                                           f'ID: {user["tg_ID"]}\n'
+                                           f'Ник: {user.get("nick")}\n'
+                                           f'Баланс: {client.get_user_balance_by_id(user["id"])}',
                                       chat_id=call.message.chat.id,
                                       message_id=call.message.message_id,
                                       reply_markup=inline_markup)
@@ -224,8 +223,8 @@ def callback_query(call):
                                                    callback_data=f'Страница №'))
 
         for user in users[(page * 4) - 4:page * 4]:
-            inline_markup.add(telebot.types.InlineKeyboardButton(text=f'Юзер: {user["name"]}',
-                                                                 callback_data=f"user_{user['id']}"))
+            inline_markup.add(telebot.types.InlineKeyboardButton(text=f'Юзер: {user["tg_ID"]}',
+                                                                 callback_data=f"user_{user['tg_ID']}"))
 
             bot.edit_message_text(text="Юзеры:",
                                   chat_id=call.message.chat.id,
@@ -261,15 +260,16 @@ def callback_query(call):
 
     # удаление пользователя
     if query_type == 'delete' and call.data.split('_')[1] == 'user':
-        user_id = int(call.data.split('_')[2])  # получаем и превращаем id в число
+
+        user_id = int(call.data.split('_')[2])  # получаем и превращаем наш айди в число
         for i, user in enumerate(users):
-            if user['id'] == user_id:
+            if user['tg_ID'] == user_id:
                 print(f'Удален Юзер: {users[i]}')
-                users.pop(i)
+                client.delete_user(users.pop(i)['id'])
         inline_markup = telebot.types.InlineKeyboardMarkup()
         for user in users:
-            inline_markup.add(telebot.types.InlineKeyboardButton(text=f'Юзер: {user["name"]}',
-                                                                 callback_data=f"user_{user['id']}"))
+            inline_markup.add(telebot.types.InlineKeyboardButton(text=f'Юзер: {user["tg_ID"]}',
+                                                                 callback_data=f"user_{user['tg_ID']}"))
         bot.edit_message_text(text="Юзеры:",
                               chat_id=call.message.chat.id,
                               message_id=call.message.message_id,
@@ -282,13 +282,81 @@ def total_balance(message):
     btn1 = telebot.types.KeyboardButton('Меню')
     btn2 = telebot.types.KeyboardButton('Админка')
     markup.add(btn1, btn2)
-
-    balance = 0
-    for user in users:
-        balance += user['balance']
+    balance = client.get_total_balance()
 
     text = f'Общий баланс: {balance}'
     bot.send_message(message.chat.id, text, reply_markup=markup)
 
 
+# конечный автомат для обработки диалога с отправкой транзакции
+states_list = ["ADDRESS", "AMOUNT", "CONFIRM"]
+states_of_users = {}
+
+
+@bot.message_handler(regexp='Перевести')
+def start_transaction(message):
+    markup = telebot.types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    btn1 = telebot.types.KeyboardButton('Меню')
+    markup.add(btn1)
+    text = f'Введите адрес кошелька куда хотите перевести: '
+    bot.send_message(message.chat.id, text, reply_markup=markup)
+    # тут мы даём юзеру состояние при котором ему будет возвращаться следующее сообщение
+    states_of_users[message.from_user.id] = {"STATE": "ADDRESS"}
+
+
+@bot.message_handler(func=lambda message: states_of_users.get(message.from_user.id)["STATE"] == 'ADDRESS')
+def get_amount_of_transaction(message):
+    if message.text == "Меню":
+        del states_of_users[message.from_user.id]
+        menu(message)
+    markup = telebot.types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    btn1 = telebot.types.KeyboardButton('Меню')
+    markup.add(btn1)
+    text = f'Введите сумму в сатоши, которую хотите перевести: '
+    bot.send_message(message.chat.id, text, reply_markup=markup)
+    # тут мы даём юзеру состояние при котором ему будет возвращаться следующее сообщение
+    states_of_users[message.from_user.id]["STATE"] = "AMOUNT"
+    states_of_users[message.from_user.id]["ADDRESS"] = message.text
+
+
+@bot.message_handler(func=lambda message: states_of_users.get(message.from_user.id)["STATE"] == 'AMOUNT')
+def get_confirmation_of_transaction(message):
+    if message.text == "Меню":
+        del states_of_users[message.from_user.id]
+        menu(message)
+    markup = telebot.types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    btn1 = telebot.types.KeyboardButton('Меню')
+    markup.add(btn1)
+    if message.text.isdigit():
+        text = f'Вы хотите перевести {message.text} сатоши,\n' \
+               f'на биткоин-адрес {states_of_users[message.from_user.id]["ADDRESS"]}: '
+        confirm = telebot.types.KeyboardButton('Подтверждаю')
+        markup.add(confirm)
+        bot.send_message(message.chat.id, text, reply_markup=markup)
+        # тут мы даём юзеру состояние при котором ему будет возвращаться следующее сообщение
+        states_of_users[message.from_user.id]["STATE"] = "CONFIRM"
+        states_of_users[message.from_user.id]["AMOUNT"] = int(message.text)
+    else:
+        text = f'Вы ввели не число, попробуйте заново: '
+        bot.send_message(message.chat.id, text, reply_markup=markup)
+
+
+@bot.message_handler(func=lambda message: states_of_users.get(message.from_user.id)["STATE"] == 'CONFIRM')
+def get_hash_of_transaction(message):
+    if message.text == "Меню":
+        del states_of_users[message.from_user.id]
+        menu(message)
+    elif message.text == "Подтверждаю":
+        bot.send_message(message.chat.id, f" Ваша транзакция: " + str(client.create_transaction(message.from_user.id,
+                                                                                                states_of_users[
+                                                                                                    message.from_user.id][
+                                                                                                    'ADDRESS'],
+                                                                                                states_of_users[
+                                                                                                    message.from_user.id][
+                                                                                                    'AMOUNT'])))
+        del states_of_users[message.from_user.id]
+        menu(message)
+
+
+# запуск бота
 bot.infinity_polling()
