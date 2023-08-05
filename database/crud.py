@@ -127,6 +127,12 @@ def get_user_info(user: pydantic_models.User):
             "received_transactions": user.received_transactions if user.received_transactions else []}
 
 
+@db_session
+def get_user_transactions(user_id):
+    return list(map(lambda t: t.to_dict(),
+                    Transaction.select(lambda trans: trans.sender.id == user_id or trans.receiver.id == user_id)[:]))
+
+
 # --------------------------- READ --------------------------- #
 
 # -------------------------- UPDATE -------------------------- #
@@ -160,8 +166,8 @@ def update_user(user: pydantic_models.UserToUpdate):
         user_to_update.nick = user.nick
     if user.create_date:
         user_to_update.create_date = user.create_date
-    if user.wallet:
-        user_to_update.wallet = user.wallet
+    # if user.wallet:
+    #     user_to_update.wallet = user.wallet
     return user_to_update
 
 # -------------------------- UPDATE -------------------------- #

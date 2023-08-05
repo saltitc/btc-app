@@ -40,14 +40,19 @@ class Wallet(pydantic.BaseModel):
 
 class UserToUpdate(pydantic.BaseModel):
     id: int
-    tg_ID: int = None
-    nick: str = None
-    create_date: datetime = None
-    wallet: 'Wallet' = None
+    tg_ID: int | None = None
+    nick: str | None = None
+    create_date: datetime | None = None
+    # wallet: 'Wallet' = None
 
 
 class UserToCreate(pydantic.BaseModel):
     tg_ID: int = None
-    nick: str = None
+    nick: str | None = None
 
 
+UserToUpdate.model_rebuild()
+UserToCreate.model_rebuild()
+Transaction.model_rebuild()
+Wallet.model_rebuild()
+User.model_rebuild()

@@ -9,20 +9,20 @@ api = FastAPI()
 
 # ------------------- Users --------------------- #
 @api.post('/user/create')
-def create_user(user: pydantic_models.UserToCreate = fastapi.Body()):
+def create_user(user: pydantic_models.UserToCreate):
     """Создание пользователя"""
     return crud.create_user(tg_id=user.tg_ID,
                             nick=user.nick if user.nick else None).to_dict()
 
 
-@api.put('/user/{user_id: int}')
+@api.put('/user/{user_id}')
 def update_user(user_id: int, user: pydantic_models.UserToUpdate = fastapi.Body()):
     """Обновление пользователя"""
     if user_id == user.id:
         return crud.update_user(user).to_dict()
 
 
-@api.delete('/user/{user_id: int}')
+@api.delete('/user/{user_id}')
 @crud.db_session
 def delete_user(user_id: int = fastapi.Path()):
     """Удаление пользователя"""
@@ -61,6 +61,18 @@ def get_user_by_tg_id(tg_id: int):
     """Получение пользователя по id телеграма"""
     user = crud.get_user_info(crud.User.get(tg_ID=tg_id))
     return user
+
+
+@api.get("/get_user_wallet/{user_id:int}")
+@crud.db_session
+def get_user_wallet(user_id):
+    return crud.get_wallet_info(crud.User[user_id].wallet)
+
+
+@api.get("/get_user_transactions/{user_id:int}")
+@crud.db_session
+def get_user_wallet(user_id):
+    return crud.get_user_transactions(user_id)
 
 
 # ------------------- Users --------------------- #
