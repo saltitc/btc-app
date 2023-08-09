@@ -2,13 +2,26 @@ import requests
 import pydantic_models
 from config import api_url
 
+form_headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+
+payload = 'username=admin&password=admin'
+raw_token = requests.post(api_url + "/token",
+                          headers=form_headers,
+                          data=payload)
+token = raw_token.json()
+sesh = requests.Session()
+sesh.headers = {
+    'accept': 'application/json',
+    'Authorization': "Bearer " + token['access_token']
+}
+
 
 def update_user(user: dict):
     """Обновляем пользователя"""
     # валидируем данные о юзере, так как мы не под декоратором fastapi и это нужно делать вручную
     user = pydantic_models.UserToUpdate.model_validate(user)
     # чтобы отправить пост запрос - используем метод .post, в аргументе data - отправляем строку в формате json
-    responce = requests.put(f'{api_url}/user/{user.id}', data=user.model_dump_json())
+    responce = sesh.put(f'{api_url}/user/{user.id}', data=user.model_dump_json())
     try:
         return responce.json()
     except:
@@ -21,7 +34,7 @@ def delete_user(user_id: int):
     :param user_id:
     :return:
     """
-    return requests.delete(f'{api_url}/user/{user_id}').json()
+    return sesh.delete(f'{api_url}/user/{user_id}').json()
 
 
 def create_user(user: pydantic_models.UserToCreate):
@@ -31,7 +44,7 @@ def create_user(user: pydantic_models.UserToCreate):
     :return:
     """
     user = pydantic_models.UserToCreate.model_validate(user)
-    return requests.post(f'{api_url}/user/create', data=user.model_dump_json()).json()
+    return sesh.post(f'{api_url}/user/create', data=user.model_dump_json()).json()
 
 
 def get_info_about_user(user_id):
@@ -40,7 +53,7 @@ def get_info_about_user(user_id):
     :param user_id:
     :return:
     """
-    return requests.get(f'{api_url}/get_info_by_user_id/{user_id}').json()
+    return sesh.get(f'{api_url}/get_info_by_user_id/{user_id}').json()
 
 
 def get_user_balance_by_id(user_id):
@@ -49,7 +62,7 @@ def get_user_balance_by_id(user_id):
     :param user_id:
     :return:
     """
-    responce = requests.get(f'{api_url}/get_user_balance_by_id/{user_id}')
+    responce = sesh.get(f'{api_url}/get_user_balance_by_id/{user_id}')
     try:
         return float(responce.text)
     except:
@@ -62,7 +75,7 @@ def get_total_balance():
 
     :return:
     """
-    responce = requests.get(f'{api_url}/get_total_balance')
+    responce = sesh.get(f'{api_url}/get_total_balance')
     try:
         return float(responce.text)
     except:
@@ -74,12 +87,12 @@ def get_users():
     Получаем всех пользователей
     :return list:
     """
-    return requests.get(f"{api_url}/users").json()
+    return sesh.get(f"{api_url}/users").json()
 
 
 def get_user_wallet_by_tg_id(tg_id):
     user_dict = get_user_by_tg_id(tg_id)
-    return requests.get(f"{api_url}/get_user_wallet/{user_dict['id']}").json()
+    return sesh.get(f"{api_url}/get_user_wallet/{user_dict['id']}").json()
 
 
 def get_user_by_tg_id(tg_id):
@@ -88,7 +101,7 @@ def get_user_by_tg_id(tg_id):
     :param tg_id:
     :return:
     """
-    return requests.get(f"{api_url}/user_by_tg_id/{tg_id}").json()
+    return sesh.get(f"{api_url}/user_by_tg_id/{tg_id}").json()
 
 
 def get_user_transactions(user_id: int):
@@ -97,7 +110,7 @@ def get_user_transactions(user_id: int):
     :param user_id:
     :return:
     """
-    responce = requests.get(f"{api_url}/get_user_transactions/{user_id}")
+    responce = sesh.get(f"{api_url}/get_user_transactions/{user_id}")
     try:
         return responce.json()
     except Exception as E:
@@ -109,5 +122,5 @@ def create_transaction(tg_id, receiver_address: str, amount_btc_without_fee: flo
     user_dict = get_user_by_tg_id(tg_id)
     payload = {'receiver_address': receiver_address,
                'amount_btc_without_fee': amount_btc_without_fee}
-    responce = requests.post(f"{api_url}/create_transaction/{user_dict['id']}", json=payload)
+    responce = sesh.post(f"{api_url}/create_transaction/{user_dict['id']}", json=payload)
     return responce.text
