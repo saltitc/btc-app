@@ -51,6 +51,23 @@ class UserToCreate(pydantic.BaseModel):
     nick: str | None = None
 
 
+class Token(pydantic.BaseModel):
+    access_token: str
+    token_type: str
+
+
+class TokenData(pydantic.BaseModel):
+    username: str | None = None
+
+
+class Admin(pydantic.BaseModel):
+    username: str
+
+
+class UserInDB(Admin):
+    hashed_password: str
+
+
 UserToUpdate.model_rebuild()
 UserToCreate.model_rebuild()
 Transaction.model_rebuild()
