@@ -123,4 +123,4 @@ def create_transaction(tg_id, receiver_address: str, amount_btc_without_fee: flo
     payload = {'receiver_address': receiver_address,
                'amount_btc_without_fee': amount_btc_without_fee}
     responce = sesh.post(f"{api_url}/create_transaction/{user_dict['id']}", json=payload)
-    return responce.text
+    return responce.json()

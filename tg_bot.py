@@ -4,6 +4,10 @@ import pydantic_models
 import client
 import json
 import math
+from datetime import datetime
+import locale
+
+locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
 
 bot = telebot.TeleBot(config.bot_token)
 
@@ -43,24 +47,27 @@ def wallet(message):
     btn1 = telebot.types.KeyboardButton('Меню')  # кнопка возврата в меню
     markup.add(btn1)
 
-    balance = 0  # сюда будем получать баланс через API
     text = f'Ваш баланс: {wallet["balance"] / 100000000} BTC\n' \
-           f'Ваш адрес: {wallet["address"]}'
+           f'Адрес вашего кошелька:\n{wallet["address"]}'
 
     bot.send_message(message.chat.id, text, reply_markup=markup)
 
 
 @bot.message_handler(regexp='История')
 def history(message):
-    markup = telebot.types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-
-    btn1 = telebot.types.KeyboardButton('Меню')
-    markup.add(btn1)
+    inline_markup = telebot.types.InlineKeyboardMarkup()
 
     transactions = client.get_user_transactions(client.get_user_by_tg_id(message.from_user.id)['id'])
-    text = f'Ваши транзакции \n{transactions}'
+    for n, tr in enumerate(transactions):
+        tx_date = datetime.strptime(tr['date_of_transaction'], '%Y-%m-%dT%X.%f')
+        inline_markup.add(telebot.types.InlineKeyboardButton(
+            text=f'Дата: {tx_date.strftime("%d.%m.%Y")} ({round(tr["amount_btc_without_fee"] / 3391, 2)} USD)',
+            callback_data=f"tx_{n}"
+        ))
 
-    bot.send_message(message.chat.id, text, reply_markup=markup)
+    text = f"История ваших транзакций:\n"
+
+    bot.send_message(message.chat.id, text, reply_markup=inline_markup)
 
 
 @bot.message_handler(regexp='Меню')
@@ -102,6 +109,8 @@ def admin_panel(message):
 all_pages = math.ceil(len(client.get_users()) / 4)  # количество страниц
 page = 1  # страница
 current = 0  # количество пользователей до страницы
+
+
 # ------- For pagination ------- #
 
 
@@ -143,6 +152,40 @@ def callback_query(call):
     query_type = call.data.split('_')[0]  # получаем тип запроса
     users = client.get_users()
 
+    # запрос информации по транзакции
+    if query_type == 'tx':
+        tx_id = call.data.split('_')[1]  # получаем id транзакции
+        inline_markup = telebot.types.InlineKeyboardMarkup()
+
+        transaction = client.get_user_transactions(client.get_user_by_tg_id(call.from_user.id)['id'])[int(tx_id)]
+        inline_markup.add(telebot.types.InlineKeyboardButton(text="Назад", callback_data='txs'))
+
+        tx_date = datetime.strptime(transaction['date_of_transaction'], '%Y-%m-%dT%X.%f')
+        transaction_info = f"<b>Адрес получателя</b>: <i>{transaction['receiver_address']}</i>\n" \
+                           f"<b>Сумма перевода</b>: <i>{round(transaction['amount_btc_without_fee'] / 3391, 2)} USD</i>\n" \
+                           f"<b>Комиссия</b>: <i>{round(transaction['fee'] / 3391, 2)} USD</i>\n" \
+                           f"<b>Хеш транзакции</b>: <i>{transaction['tx_hash']}</i>\n" \
+                           f"<b>Дата транзакции</b>: <i>{tx_date.strftime('%d.%m.%Y %H:%M:%S')}</i>\n"
+
+        bot.edit_message_text(text=transaction_info,
+                              chat_id=call.message.chat.id,
+                              message_id=call.message.message_id,
+                              reply_markup=inline_markup,
+                              parse_mode='HTML')
+
+    if query_type == 'txs':
+        inline_markup = telebot.types.InlineKeyboardMarkup()
+
+        transactions = client.get_user_transactions(client.get_user_by_tg_id(call.from_user.id)['id'])
+        for n, tr in enumerate(transactions):
+            tx_date = datetime.strptime(tr['date_of_transaction'], '%Y-%m-%dT%X.%f')
+            inline_markup.add(telebot.types.InlineKeyboardButton(text=f'Дата: {tx_date.strftime("%d.%m.%Y")}',
+                                                                 callback_data=f"tx_{n}"))
+        bot.edit_message_text(text="Ваши транзакции:",
+                              chat_id=call.message.chat.id,
+                              message_id=call.message.message_id,
+                              reply_markup=inline_markup)
+
     # запрос информации по пользователю
     if query_type == 'user':
         user_id = call.data.split('_')[1]  # получаем id пользователя
@@ -158,7 +201,8 @@ def callback_query(call):
                 bot.edit_message_text(text=f'Данные по юзеру:\n'
                                            f'ID: {user["tg_ID"]}\n'
                                            f'Ник: {user.get("nick")}\n'
-                                           f'Баланс: {client.get_user_balance_by_id(user["id"])}',
+                                           f'Баланс: {client.get_user_balance_by_id(user["id"]) / 100000000} BTC\n'
+                                           f'Кошелек: {client.get_info_about_user(user["id"])["wallet"]["address"]}',
                                       chat_id=call.message.chat.id,
                                       message_id=call.message.message_id,
                                       reply_markup=inline_markup)
@@ -284,7 +328,7 @@ def total_balance(message):
     markup.add(btn1, btn2)
     balance = client.get_total_balance()
 
-    text = f'Общий баланс: {balance}'
+    text = f'Общий баланс: {balance / 100000000} BTC'
     bot.send_message(message.chat.id, text, reply_markup=markup)
 
 
@@ -312,7 +356,7 @@ def get_amount_of_transaction(message):
     markup = telebot.types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     btn1 = telebot.types.KeyboardButton('Меню')
     markup.add(btn1)
-    text = f'Введите сумму в сатоши, которую хотите перевести: '
+    text = f'Введите сумму в сатоши (1 BTC = 99978005 SATS), которую хотите перевести: '
     bot.send_message(message.chat.id, text, reply_markup=markup)
     # тут мы даём юзеру состояние при котором ему будет возвращаться следующее сообщение
     states_of_users[message.from_user.id]["STATE"] = "AMOUNT"
@@ -347,16 +391,25 @@ def get_hash_of_transaction(message):
         del states_of_users[message.from_user.id]
         menu(message)
     elif message.text == "Подтверждаю":
-        bot.send_message(message.chat.id, f" Ваша транзакция: " + str(client.create_transaction(message.from_user.id,
-                                                                                                states_of_users[
-                                                                                                    message.from_user.id][
-                                                                                                    'ADDRESS'],
-                                                                                                states_of_users[
-                                                                                                    message.from_user.id][
-                                                                                                    'AMOUNT'])))
+        transaction = client.create_transaction(
+            message.from_user.id,
+            states_of_users[message.from_user.id]['ADDRESS'],
+            states_of_users[message.from_user.id]['AMOUNT']
+        )
+        tx_date = datetime.strptime(transaction['date_of_transaction'], '%Y-%m-%dT%X.%f')
+        bot.send_message(message.chat.id, f"Транзакция прошла успешно.\n\nИнформация о транзакции:\n"
+                                          f"<b>Адрес отправителя</b>: <i>{transaction['sender_address']}</i>\n"
+                                          f"<b>Адрес получателя</b>: <i>{transaction['receiver_address']}</i>\n"
+                                          f"<b>Сумма перевода</b>: <i>{transaction['amount_btc_without_fee']} SATS "
+                                          f"({round(transaction['amount_btc_without_fee'] / 3391, 2)} USD)</i>\n"
+                                          f"<b>Комиссия</b>: <i>{transaction['fee']} SATS "
+                                          f"({round(transaction['fee'] / 3391, 2)} USD)</i>\n"
+                                          f"<b>Дата транзакции</b>: <i>{tx_date.strftime('%d.%m.%Y %H:%M:%S')}</i>\n"
+                                          f"<b>Хеш транзакции</b>: <i>{transaction['tx_hash']}</i>\n",
+                         parse_mode='HTML')
+
         del states_of_users[message.from_user.id]
         menu(message)
-
 
 # запуск бота
 bot.infinity_polling()
