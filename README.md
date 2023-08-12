@@ -2,6 +2,27 @@
 
 This project was written using fastapi, pyTelegramBotAPI and the bit library for working with bitcoin. When you first launch a telegram bot, a crypto wallet is created for you, you can check your balance, send bitcoin to other wallets and view your transaction history. An admin panel has been added for the administrator, where he can view all users, information about them, delete a specific user, view the total balance of all users
 
+## Structure
+```
+├── database                             # Database files
+│   ├── crud.py                          # A set of functions that allows to work with the database
+│   ├── db.py                            # For binding to the database and matching entities with database tables
+│   └── models.py                       
+├── tg_bot.py                            # Telegram bot code that sends requests to api from the client
+├── client.py                            # HTTP client to work with api
+├── app.py                               # Handling API requests
+├── config.py                            # Configuration file
+├── pydantic_models.py                   # To validate the data that the server receives and sends
+├── requirements.txt                     # All libraries used in the project
+├── .gitignore                           # Files that git shouldn't track
+└── README.md
+```
+
+## Approximate principle of operation
+<img width="1056" alt="image" src="https://github.com/saltitc/btc-app/assets/114296895/d7118a8a-b3f8-46c7-87b6-9ed2669ea41c">
+
+[Click to see the diagram for yourself](https://whimsical.com/user-4aXiPBnfWnLm7W4jfk8Hon)
+___
 ## Getting Started
 
 These instructions will get you a copy of the project up and running on your local machine for development and testing purposes. See deployment for notes on how to deploy the project on a live system.
@@ -63,6 +84,7 @@ SECRET_KEY = "fd6c326...dcc3d00ceada42...572c648e26...1fcf9a9af"  # Receipt inst
 >>> pwd_context.hash('your_password')
 >>> ```
 >> 3. In response, you will receive a hash of your password, which you must assign to the password variable
+>> 4. You need to pass the unhashed password to the password parameter on line 7 of the client.py file
 
 > To generate a secure random secret key, use the command `openssl rand -hex 32` (works on Linux and MacOS, on Windows you can use, for example, an [online generator](https://www.browserling.com/tools/random-hex) of such numbers for this purpose)
 + Run the server:
@@ -75,7 +97,7 @@ uvicorn app:api --reload
 + Send a message to the bot 'Я в консоли', copy your id and assign it to the `tg_admin_id` variable in the `config.py` file
 
 If you did everything according to the instructions, the bot should work
-
+___
 
 ## Built With
 
